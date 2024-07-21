@@ -80,28 +80,40 @@
   "Execute a block of docker-build code with org-babel.
 This function is called by `org-babel-execute-src-block'"
   (let* ((vars (org-babel--get-vars params))
-	 (tag (if (assoc :tag params) (cdr (assoc :tag params)) nil))
-	 (push (if (assoc :push params) (cdr (assoc :push params)) nil))
-	 (dir (cdr-safe (assoc :dir params)))
-	 (tag-param (if tag (concat " -t " tag) ""))
-	 (push-param (if push (concat " -t " push) ""))
-	 )
+		 (tag (if (assoc :tag params) (cdr (assoc :tag params)) nil))
+		 (push (if (assoc :push params) (cdr (assoc :push params)) nil))
+		 (engine (if (assoc :engine params) (cdr (assoc :engine params)) nil))
+		 (dir (cdr-safe (assoc :dir params)))
+		 (tag-param (if tag (concat " -t " tag) ""))
+		 (push-param (if push (concat " -t " push) ""))
+		 (engine-param (if engine (concat " -t " engine) ""))
+		 )
 
     (message tag)
 
     (if (not dir)
-	(error "A build context is required for Docker.  Please provide a :dir header arg")
-	)
-
-    (message "executing docker-build source code block")
-    (if push
-	(progn
-	  (org-babel-eval-docker-build (concat "docker build " dir tag-param push-param " -f" ) body dir)
-	  (sleep-for 3)
-	  (async-shell-command (concat "docker push " push) "*docker-push*")
+		(error "A build context is required for Docker.  Please provide a :dir header arg")
 	  )
-	  (org-babel-eval-docker-build (concat "docker build " dir tag-param " -f" ) body dir)
-      )
+
+    (message "executing %s-build source code block" engine)
+	(if push
+		(if engine
+			(progn
+			  (org-babel-eval-docker-build (concat "docker build " dir tag-param push-param " -f" ) body dir)
+			  (sleep-for 3)
+			  (async-shell-command (concat "docker push " push) "*docker-push*")
+			  )
+		  (progn
+			(org-babel-eval-docker-build (concat "buildah bud " dir tag-param push-param " -f" ) body dir)
+			(sleep-for 3)
+			(async-shell-command (concat "podman push " push) "*docker-push*")
+			)
+		  )
+
+	  (if engine
+		  (org-babel-eval-docker-build (concat "docker build " dir tag-param " -f" ) body dir)
+		(org-babel-eval-docker-build (concat "buildah bud " dir tag-param " -f" ) body dir))
+	  )
     )
   ;; when forming a shell command, or a fragment of code in some
   ;; other language, please preprocess any file names involved with
